@@ -1,0 +1,32 @@
+{
+    "manifest_version": 3,
+    "name": "google-calendar-daylight",
+    "version": "1.0",
+    "description": "shows users when daylights and twilights are",
+    "permissions": [
+        "scripting",
+        "activeTab",
+        "storage",
+        "geolocation"
+    ],
+    "host_permissions": [
+        "*://calendar.google.com/*"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "sun-emoji.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://calendar.google.com/*"
+            ],
+            "css": [
+                "styles.css"
+            ],
+            "js": [
+                "src/daylightManager.js"
+            ]
+        }
+    ]
+}
