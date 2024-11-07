@@ -1,37 +1,57 @@
-console.log(document.body)
+let currentUrl = '';
 
-let daylightObject = fetchDaylightObjectPromise() // PROMISE
+const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.type === "childList" && location.href !== currentUrl) {
+            // console.log("URL changed:", location.href);
+            currentUrl = location.href;
+            
+            // Perform actions on URL change here
+            performUIChanges(document.body)
+        }
+    });
+});
 
-daylightObject.then(data => {
-    console.log(data)
-})
+// Start observing the document's title attribute (which changes on URL changes in SPAs)
+observer.observe(document.querySelector("title"), { childList: true });
 
+// initial load
+// document.addEventListener("DOMContentLoaded", () => {
+//     // Your code here
+//     console.log("DOM is fully loaded");
+//     performUIChanges(document.body);
+// });
 setTimeout(() => {
-    traverseDOM(document.body);
-}, 2000);
+    performUIChanges(document.body);
+}, 600);
 
 
 function isHourLabelsContainer(node) {
-    let hours = [
+    const hours = [
         "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM",
         "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM"
     ]
     if (node.childNodes.length === 0) return false
     let count = 0
 
-    node.childNodes.forEach((child, i) => {
+    let i = 0
+    for (const child of node.childNodes) {
         if (isCorrectHourLabelText(child, hours[i])) {
             count++
+        } else {
+            break
         }
-    })
+
+        i++
+    }
     return count == 24
 }
 
-function isCorrectHourLabelText(hourLabel, hourString) {
-    if (hourLabel.childNodes.length != 1) return false
+function isCorrectHourLabelText(hourLabelNode, hourString) {
+    if (hourLabelNode.childNodes.length != 1) return false
     let isCorrectHourLabel = true
     // Only a span element inside
-    hourLabel.childNodes.forEach(child => {
+    hourLabelNode.childNodes.forEach(child => {
         const text = child.textContent.trim();
         isCorrectHourLabel &= (text === hourString)
     })
@@ -51,34 +71,35 @@ function changeHourColor(node) {
     */
     let sunrise
     let sunset
-
-    daylightObject.then(data => {
+    fetchDaylightObjectPromise().then(data => {
         sunrise = new Date(data.results.sunrise)
         sunset = new Date(data.results.sunset)
-
+        astronomical_twilight_begin = new Date(data.results.astronomical_twilight_begin)
+        astronomical_twilight_end = new Date(data.results.astronomical_twilight_end)
 
         node.childNodes.forEach(child => {
             timeAndModifierArray = child.textContent.trim().split(" ")
-            
+
             if (timeAndModifierArray.length != 2) return
-            
+
             time = Number(timeAndModifierArray[0])
             modifier = timeAndModifierArray[1].toLowerCase()
-            
+
             if (time == 12 && modifier == "am") {
                 time = 0
             } else if (modifier === "pm" && time != 12) {
                 time += 12
             }
-            
-            // Not sure why UTC is okay for this
-            console.log("time " + time)
-            console.log("sunrise " + sunrise.getUTCHours())
-            console.log("sunset " + sunset.getUTCHours())
-            
+
             child.childNodes[0].style.fontWeight = 'bold'
-            if (sunrise.getUTCHours() <= time && time < sunset.getUTCHours()) {
-                child.style.backgroundColor = '#fffe00'
+            if (astronomical_twilight_begin.getHours() <= time && time < sunrise.getHours()) {
+                child.childNodes[0].style.color = '#ffffff'
+                child.style.backgroundColor = '#7f8cff'
+            } else if (sunrise.getHours() <= time && time < sunset.getHours()) {
+                child.style.backgroundColor = '#fbff65'
+            } else if (sunset.getHours() <= time && time < astronomical_twilight_end.getHours()) {
+                child.childNodes[0].style.color = '#ffffff'
+                child.style.backgroundColor = '#7f8cff'
             } else {
                 child.childNodes[0].style.color = '#ffffff'
                 child.style.backgroundColor = '#0010a0'
@@ -88,7 +109,10 @@ function changeHourColor(node) {
 
 }
 
-function traverseDOM(node) {
+function performUIChanges(node) {
+    const parts = currentUrl.split("/");
+    if (!parts.includes("week") && !parts.includes("day") ) return
+
     if (isHourLabelsContainer(node)) {
         changeHourColor(node)
         return // base case recursion
@@ -96,27 +120,43 @@ function traverseDOM(node) {
 
     node.childNodes.forEach(child => {
         if (child.nodeType === 1) {
-            traverseDOM(child);
+            performUIChanges(child);
         }
     });
 }
 
-function fetchDaylightObjectPromise() {
-    let lat, lon
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            lat = position.coords.latitude;
-            lon = position.coords.longitude;
-        }
-    )
-    return fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
+async function fetchDaylightObjectPromise() {
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                lat = position.coords.latitude;
+                lon = position.coords.longitude;
+                
+                // console.log(lat,lon)
+                fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0&date=${getDateFromURL()}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        resolve(response.json())
+                    })
+                    .catch(error => {
+                        console.error('Error fetching data:', error);
+                    })
+            },
+            (err) => {
+                console.warn(`ERROR(${err.code}): ${err.message}`);
             }
-            return response.json();
-        })
-        .catch(error => {
-            console.error('Error fetching data:', error);
-        });
+        )
+    }, (reject) => {
+        console.log(reject)
+    })
+}
+
+function getDateFromURL() {
+    const parts = currentUrl.split("/");
+
+    if (parts[parts.length-1] === 'week' || parts[parts.length-1] === 'day') return 'today'
+
+    return parts.slice(-3).join("-");
 }
