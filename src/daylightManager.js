@@ -1,13 +1,11 @@
-let currentUrl = '';
+let currentUrl = location.href
+let daylightObjectPromise
 
 const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
         if (mutation.type === "childList" && location.href !== currentUrl) {
-            // console.log("URL changed:", location.href);
             currentUrl = location.href;
-            
-            // Perform actions on URL change here
-            performUIChanges(document.body)
+            performUIChanges()
         }
     });
 });
@@ -16,13 +14,8 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.querySelector("title"), { childList: true });
 
 // initial load
-// document.addEventListener("DOMContentLoaded", () => {
-//     // Your code here
-//     console.log("DOM is fully loaded");
-//     performUIChanges(document.body);
-// });
 setTimeout(() => {
-    performUIChanges(document.body);
+    performUIChanges()
 }, 600);
 
 
@@ -71,7 +64,7 @@ function changeHourColor(node) {
     */
     let sunrise
     let sunset
-    fetchDaylightObjectPromise().then(data => {
+    daylightObjectPromise.then(data => {
         sunrise = new Date(data.results.sunrise)
         sunset = new Date(data.results.sunset)
         astronomical_twilight_begin = new Date(data.results.astronomical_twilight_begin)
@@ -92,27 +85,31 @@ function changeHourColor(node) {
             }
 
             child.childNodes[0].style.fontWeight = 'bold'
+            child.childNodes[0].style.color = '#ffffff'
+            child.childNodes[0].style.fontSize = '11px'
+
             if (astronomical_twilight_begin.getHours() <= time && time < sunrise.getHours()) {
-                child.childNodes[0].style.color = '#ffffff'
-                child.style.backgroundColor = '#7f8cff'
+                child.style.backgroundColor = '#6f8f9a'
             } else if (sunrise.getHours() <= time && time < sunset.getHours()) {
-                child.style.backgroundColor = '#fbff65'
+                child.style.backgroundColor = '#a5cddc'
             } else if (sunset.getHours() <= time && time < astronomical_twilight_end.getHours()) {
-                child.childNodes[0].style.color = '#ffffff'
-                child.style.backgroundColor = '#7f8cff'
+                child.style.backgroundColor = '#6f8f9a'
             } else {
-                child.childNodes[0].style.color = '#ffffff'
-                child.style.backgroundColor = '#0010a0'
+                child.style.backgroundColor = '#2f454d'
             }
         })
     })
-
 }
 
-function performUIChanges(node) {
+function performUIChanges() {
+    console.log("setting daylight twilight UI changes")
+    daylightObjectPromise = fetchDaylightObjectPromise()
+    traverseDOMAndUpdateNodes(document.body)
+}
+
+function traverseDOMAndUpdateNodes(node) {
     const parts = currentUrl.split("/");
     if (!parts.includes("week") && !parts.includes("day") ) return
-
     if (isHourLabelsContainer(node)) {
         changeHourColor(node)
         return // base case recursion
@@ -120,7 +117,7 @@ function performUIChanges(node) {
 
     node.childNodes.forEach(child => {
         if (child.nodeType === 1) {
-            performUIChanges(child);
+            traverseDOMAndUpdateNodes(child);
         }
     });
 }
@@ -132,7 +129,7 @@ async function fetchDaylightObjectPromise() {
                 lat = position.coords.latitude;
                 lon = position.coords.longitude;
                 
-                // console.log(lat,lon)
+                console.log(lat,lon)
                 fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0&date=${getDateFromURL()}`)
                     .then(response => {
                         if (!response.ok) {

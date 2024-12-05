@@ -4,10 +4,6 @@
     "version": "1.0",
     "description": "shows users when daylights and twilights are",
     "permissions": [
-        "webNavigation",
-        "scripting",
-        "activeTab",
-        "storage",
         "geolocation"
     ],
     "host_permissions": [
